@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="./vue.min.js"></script>
+  <!-- 引入样式 -->
+  <link rel="stylesheet" href="./element.css">
+  <!-- 引入组件库 -->
+  <script src="./element.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+    }
+    .el-input {
+      margin-right: 0!important;
+    }
+    li {
+      list-style: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <ul>
+      <li>社保：<el-input v-model.number="constants.shebao" style="width: 120px;"></el-input> {{ moneyAddComma(constants.shebao) }}元</li>
+      <li>公积金：<el-input v-model.number="constants.gjj" style="width: 120px;"></el-input> {{ moneyAddComma(constants.gjj) }}元</li>
+      <li>附加扣除：<el-input v-model.number="constants.fujia" style="width: 120px;"></el-input> {{ moneyAddComma(constants.fujia) }}元</li>
+    </ul>
+    <h1>月工资</h1>
+    <ul style="display: flex;flex-wrap: wrap;">
+      <li v-for="i in 12" :key="i">
+        <el-input v-model.number="payList[i]" style="width: 100px;margin-right: 20px;margin-top: 20px;" :placeholder="`${i}月工资`"></el-input>
+        <span style="margin-right: 20px;font-size: 12px;">{{ payList[i] ? moneyAddComma(payList[i]) : '-' }}元</span>
+      </li>
+    </ul>
+    <p></p>
+    <el-button style="margin-top: 20px;" type="success" @click="onStart">计算个税</el-button>
+    <h1>个税计算</h1>
+    <el-table :data="tableData" border style="width: 100%" show-summary>
+      <el-table-column prop="day" label="月份"></el-table-column>
+      <el-table-column prop="beforeMoney" label="税前工资(元)">
+        <template v-slot="scope">
+          金额：{{ scope.row.beforeMoney ? moneyAddComma(scope.row.beforeMoney) : '-' }}元
+        </template>
+      </el-table-column>
+      <el-table-column label="社保公积金">
+        <template v-slot="scope">
+          <span>{{ moneyAddComma(constants.shebao + constants.gjj) }}元</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="附加扣除">
+        <template v-slot="scope">
+          <span>{{ moneyAddComma(constants.fujia) }}元</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="oughtTaxSumMoney" label="累计应纳税所得额" :formatter="formatterMoney"></el-table-column>
+      <el-table-column prop="taxRatio" label="税率" :formatter="(a, b, c) => (`${c}%`)"></el-table-column>
+      <el-table-column prop="tax" label="扣税金额（实际扣税）"></el-table-column>
+      <el-table-column prop="money" label="税后薪资" :formatter="formatterMoney"></el-table-column>
+    </el-table>
+    <h3>税率表</h3>
+    <table border="1">
+      <thead>
+        <th>级数</th>
+        <th>全年应纳税所得额</th>
+        <th>税率（%）</th>
+        <th>速算扣除数</th>
+      </thead>
+      <tbody>
+        <tr v-for="tax in taxTable">
+          <td>{{ tax.level }}</td>
+          <td>{{ `${ tax.max !== Number.MAX_SAFE_INTEGER ? moneyAddComma(tax.max) + ' >= ' : '' }$ >= ${ moneyAddComma(tax.min) }` }}</td>
+          <td>{{ tax.taxRatio }}%</td>
+          <td>{{ moneyAddComma(tax.quick) }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>计算公式：</h3>
+    <div>
+      <p><b>累计应纳税所得额(年)</b> = 月薪 - 免除5000 * day - 社保公积金 * day - 附加扣除 *day</p>
+      <p><b>预扣税金额</b> = 全年累计应纳税所得额 * 税率 - 往月所有扣税金额</p>
+      <p><b>薪资</b> = 工资 - 社保公积金 - 预扣税金额</p>
+    </div>
+  </div>
+  <script>
+    new Vue({
+      el: '#app',
+      data () {
+        return {
+          taxTable: [
+            { level: 1, max: 36000, min: 0, taxRatio: 3, quick: 0 },
+            { level: 2, max: 144000, min: 36001, taxRatio: 10, quick: 2520 },
+            { level: 3, max: 300000, min: 144001, taxRatio: 20, quick: 16920 },
+            { level: 4, max: 420000, min: 300001, taxRatio: 25, quick: 31920 },
+            { level: 5, max: 660000, min: 420001, taxRatio: 30, quick: 52920 },
+            { level: 6, max: 960000, min: 660001, taxRatio: 35, quick: 85920 },
+            { level: 7, max: Number.MAX_SAFE_INTEGER, min: 960001, taxRatio: 45, quick: 181920 }
+          ],
+          constants: {
+            shebao: 200,
+            gjj: 100,
+            fujia: 1100
+          },
+          payList: [],
+          /*
+            {
+              day: 月份
+              beforeMoney: 税前月薪
+              oughtTaxSumMoney: 累计应纳税所得额
+              nowSumTax: 截止到当月往月累计税
+              taxRatio: 税率
+              tax: 扣税
+              money: 税后
+            }
+          */
+          tableData: []
+        }
+      },
+      methods: {
+        onStart () {
+          this.tableData = this.payList.map((money,index) => ({ beforeMoney: money, day: index }))
+          this.updateTableData()
+        },
+        updateTableData () {
+          const { shebao, gjj } = this.constants
+          let table = this.tableData
+          let result = []
+
+          table = table.map((item, index, arr) => {
+            const day = item.day
+            const oughtTaxSumMoney = this.getOughtTaxSumMoney(item, day)
+            const taxTableRow = this.taxTable.find(item => (oughtTaxSumMoney <= item.max && oughtTaxSumMoney >= item.min)) || {}
+            const nowSumTax = result.reduce((total, item, k) => {
+              if (k < index) {
+                total += item.tax
+              }
+              return total
+            }, 0)
+
+            const tax = oughtTaxSumMoney * (taxTableRow.taxRatio/100) - taxTableRow.quick - nowSumTax
+            const money = item.beforeMoney - shebao - gjj - tax
+            let obj = {
+              day,
+              beforeMoney: item.beforeMoney,
+              oughtTaxSumMoney,
+              nowSumTax,
+              taxRatio: taxTableRow.taxRatio,
+              tax,
+              money
+            }
+            result.push(obj)
+          })
+          
+          this.tableData = result
+        },
+        getOughtTaxSumMoney (row, day) {
+          const { shebao, gjj, fujia } = this.constants
+          const sumBeforeMoney = this.tableData.reduce((total, row) => (row.day <= day ? (total += row.beforeMoney, total) : total), 0)
+          const sumTax = sumBeforeMoney - 5000 * day - shebao * day - gjj * day - fujia * day
+          return sumTax
+        },
+        formatterMoney (a, b, c) {
+          return c ? this.moneyAddComma(c) : '-'
+        },
+        moneyAddComma: (num) => {
+          var c = (num.toString().indexOf ('.') !== -1) ? num.toLocaleString() : num.toString().replace(/(\d)(?=(?:\d{3})+$)/g, '$1,');
+          return c;
+        }
+      }
+    })
+  </script>
+</body>
+</html>

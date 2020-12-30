@@ -141,7 +141,13 @@
           localStorage.removeItem('payList')
         },
         onStart () {
-          this.tableData = this.payList.map((money,index) => ({ beforeMoney: money, day: index+1 }))
+          let result = []
+          this.payList.map((money,index) => {
+            if (money) {
+              result.push({ beforeMoney: money, day: index+1 })
+            }
+          })
+          this.tableData = result
           this.updateTableData()
         },
         updateTableData () {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
+  <title>个税计算</title>
   <script src="./vue.min.js"></script>
   <!-- 引入样式 -->
   <link rel="stylesheet" href="./element.css">
@@ -31,13 +31,16 @@
     </ul>
     <h1>月工资</h1>
     <ul style="display: flex;flex-wrap: wrap;">
-      <li v-for="i in 12" :key="i">
-        <el-input v-model.number="payList[i]" style="width: 100px;margin-right: 20px;margin-top: 20px;" :placeholder="`${i}月工资`"></el-input>
-        <span style="margin-right: 20px;font-size: 12px;">{{ payList[i] ? moneyAddComma(payList[i]) : '-' }}元</span>
+      <li v-for="(i, index) in payList" :key="index">
+        <el-input v-model.number="payList[index]" style="width: 100px;margin-right: 20px;margin-top: 20px;" :placeholder="`${index + 1}月工资`"></el-input>
+        <span style="margin-right: 20px;font-size: 12px;">{{ payList[index] ? moneyAddComma(payList[index]) : '-' }}元</span>
       </li>
     </ul>
-    <p></p>
-    <el-button style="margin-top: 20px;" type="success" @click="onStart">计算个税</el-button>
+    <p style="margin-left: 20px;">
+      <el-button style="margin-top: 20px;" type="primary" @click="onSave">存储工资</el-button>
+      <el-button style="margin-top: 20px;" type="danger" @click="onClear">清除存储的工资</el-button>
+      <el-button style="margin-top: 20px;" type="success" @click="onStart">计算个税</el-button>
+    </p>
     <h1>个税计算</h1>
     <el-table :data="tableData" border style="width: 100%" show-summary>
       <el-table-column prop="day" label="月份"></el-table-column>
@@ -88,6 +91,14 @@
   <script>
     new Vue({
       el: '#app',
+      created () {
+        this.payList = new Array(12).fill('')
+        let payList = localStorage.getItem('payList')
+        if (payList && payList.length) {
+          this.payList = JSON.parse(payList)
+          this.onStart()
+        }
+      },
       data () {
         return {
           taxTable: [
@@ -120,8 +131,17 @@
         }
       },
       methods: {
+        onSave () {
+          const payList = this.payList
+          if (payList.length) {
+            localStorage.setItem('payList', JSON.stringify(payList))
+          }
+        },
+        onClear () {
+          localStorage.removeItem('payList')
+        },
         onStart () {
-          this.tableData = this.payList.map((money,index) => ({ beforeMoney: money, day: index }))
+          this.tableData = this.payList.map((money,index) => ({ beforeMoney: money, day: index+1 }))
           this.updateTableData()
         },
         updateTableData () {
